@@ -37,7 +37,7 @@ Base.metadata.create_all(bind=engine)
 
 # Pydantic Model for incoming data
 class ParsePayload(BaseModel):
-    candidates: List[Dict[str, Any]]
+    candidates: List[Dict[str, Dict[str, List[Dict[str, str]]]]]
 
 class CompanyResponse(BaseModel):
     id: int
@@ -63,8 +63,9 @@ def get_db():
         db.close()
 
 # Parse Function
-def parse(d: Dict) -> List[Dict[str, Any]]:
+def parse(d: Any) -> Any:
     content = d.get("candidates")[0].get("content").get("parts")[0].get("text")
+    # content = d["candidates"][0]["content"]["parts"][0]["text"]
     content = content.replace("```json\n", "").replace("\n```", "")
     content = content.replace(" ===", "===")
     content = content.replace("=== ", "===")
@@ -77,9 +78,10 @@ def parse(d: Dict) -> List[Dict[str, Any]]:
     companies = []
     for line in content:
         parts = line.split("===")
+
         companies.append({
             "name": parts[0],
-            "cgpa": float(parts[1]),
+            "cgpa": parts[1],
             "deadline": parts[2],
             "form_link": parts[3],
             "branches": parts[4].split("/")
@@ -88,11 +90,11 @@ def parse(d: Dict) -> List[Dict[str, Any]]:
 
 # POST route to parse and add companies to the database
 @app.post("/")
-async def create_companies_from_parsed(data: ParsePayload, db: Session = Depends(get_db)):
+async def create_companies_from_parsed(data, db: Session = Depends(get_db)):
     try:
         # Parse the incoming payload
-        companies = parse(data.dict())
-
+        print(data.dict())
+        companies = parse(data)
         # Add each company to the database
         for company in companies:
             db_company = Company(
@@ -110,7 +112,6 @@ async def create_companies_from_parsed(data: ParsePayload, db: Session = Depends
         raise HTTPException(status_code=400, detail=str(e))
     return {"message": "Companies parsed and added successfully"}
 
-# GET route to retrieve companies with the closest deadline
 @app.get("/", response_model=List[CompanyResponse])
 def get_closest_deadline_companies(db: Session = Depends(get_db)):
     try:
